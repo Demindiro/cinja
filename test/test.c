@@ -28,14 +28,18 @@ int main(int argc, const char **argv)
 
 	for (size_t i = 0; i < 10; i++) {
 		printf(" --- %lu --- \n", i);
+
 		cinja_dict d = cinja_dict_create();
 		cinja_dict_set(d, string_create("lorem"), string_create("Lorem ispum dolor"));
-		cinja_dict_set(d, string_create("foo"  ), string_create("Foo bar baz"));
+		cinja_dict_set(d, string_create("foo"  ), string_create("bar"));
 		cinja_dict_set(d, string_create("HTML" ), string_create("<body><h1>Hello world!</h1></body>"));
 		
 		cinja_template temp = cinja_create_from_file(get_file());
 		string render = cinja_render(temp, d);
 		puts(render->buf);
+		free(render);
+		cinja_free(temp);
+		cinja_dict_free(d);
 	}
 
 	return 0;

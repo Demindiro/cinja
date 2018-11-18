@@ -7,7 +7,6 @@
 
 
 typedef struct cinja_template {
-	cinja_dict dict;
 	size_t count;
 	union {
 		void **ptr;
@@ -29,6 +28,12 @@ cinja_template cinja_create_from_string(string str);
  * Create a new template from a file
  */
 cinja_template cinja_create_from_file(const char *path);
+
+
+/*
+ * Frees all resources allocated by a template
+ */
+void cinja_free(cinja_template temp);
 
 
 /*

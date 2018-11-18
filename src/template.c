@@ -131,9 +131,26 @@ cinja_template cinja_create_from_file(const char *path)
 }
 
 
-/*
- * Returns a null-terminated string generated from a template
- */
+void cinja_free(cinja_template temp)
+{
+	for (size_t i = 0; i < temp->count; i++) {
+		free(temp->text[i*2]);
+		switch (temp->flags[i] & FLAG_TYPE) {
+		case FLAG_TYPE_SUBST:
+			free(temp->vars[i*2 + 1]);
+			break;
+		case FLAG_TYPE_EXPR:
+			/* TODO */
+			break;
+		}
+	}
+	free(temp->text[temp->count*2]);
+	free(temp->ptr);
+	free(temp->flags);
+	free(temp);
+}
+
+
 string cinja_render(cinja_template temp, cinja_dict dict)
 {
 	string *strs = malloc(sizeof(*strs) * (2 * temp->count + 1));
@@ -151,5 +168,7 @@ string cinja_render(cinja_template temp, cinja_dict dict)
 		}
 	}
 	strs[2*temp->count] = temp->text[2*temp->count];
-	return string_concat(strs, 2 * temp->count + 1);
+	string render = string_concat(strs, 2 * temp->count + 1);
+	free(strs);
+	return render;
 }
