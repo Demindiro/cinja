@@ -1,2 +1,4 @@
-# cinja
-A subset of the Jinja templating engine written in C
+Template-soup
+=============
+
+A simple templating library designed for FCGI soup.
