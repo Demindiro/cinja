@@ -21,3 +21,11 @@ Comments
 --------
 
 Anything between `{# ... #}`.
+
+
+Trimming whitespace
+-------------------
+
+Whitespace can be trimmed by adding a `-` right before `.}` or after `{.`.
+
+e.g. `{{ FOO -}} bar {{- BAZ }}` is equivalent to `{{ FOO }}bar{{ BAZ }}`.

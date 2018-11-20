@@ -165,6 +165,7 @@ cinja_template cinja_create_from_string(string str)
 	int    type_stack[16];
 	size_t type_stack_i = 0;
 	size_t i = 0, start = i;
+	int trim_next = 0;
 	while (i < str->len) {
 		if (str->buf[i] == '{') {
 			size_t end = i;
@@ -174,23 +175,26 @@ cinja_template cinja_create_from_string(string str)
 			char c = str->buf[i];
 			i++;
 
+			int trim_prev = str->buf[i] == '-';
+			if (trim_prev)
+				i++;
+			if (trim_next) {
+				_skip_while(str, &start, " \t\n");
+				trim_next = 0;
+			}
+
 			if (!_skip_while(str, &i, " \t\n"))
 				goto error;
 			size_t s = i;
 			if (!_skip_until(str, &i, " \t\n"))
 				goto error;
 			switch (c) {
-			case '{':;
+			case '{':
+				c = '}';
 				string var = string_copy(str, s, i);
 				if (var == NULL)
 					goto error;
 				t->vars[2*t->count + 1] = var;
-
-				if (!_skip_while(str, &i, " \t\n"))
-					goto error;
-				if (i - 1 >= str->len || str->buf[i] != '}' || str->buf[i+1] != '}')
-					goto error;
-
 				t->types[t->count] = CINJA_TYPE_SUBST;
 				break;
 			case '%':
@@ -234,10 +238,6 @@ cinja_template cinja_create_from_string(string str)
 					goto error;
 				}
 
-				if (!_skip_while(str, &i, " \t\n") || str->buf[i] != '%' || str->buf[i + 1] != '}') {
-					free(t->ptr[t->count*2+1]);
-					goto error;
-				}
 				break;
 			case '#':
 				while (1) {
@@ -245,18 +245,39 @@ cinja_template cinja_create_from_string(string str)
 						break;
 					i++;
 				}
-				i++;
+				trim_next = str->buf[i-1] == '-';
 				t->types[t->count] = CINJA_TYPE_COMMENT;
-				break;
+				goto comment;
 			default:
 				goto skip;
 			}
+
+			if (!_skip_while(str, &i, " \t\n"))
+				goto error;
+			trim_next = str->buf[i] == '-';
+			if (trim_next)
+				i++;
+			if (str->buf[i] != c || str->buf[i + 1] != '}') {
+				free(t->ptr[t->count*2 + 1]);
+				goto error;
+			}
+		comment:
+			if (trim_prev) {
+				while (1) {
+					char c = str->buf[end - 1];
+					if (c != ' ' && c != '\t' && c != '\n')
+						break;
+					end--;
+				}
+			}
 			t->text[2*t->count] = string_copy(str, start, end);
-			start = i + 2;
+			i += 2;
+			start = i;
 			t->count++;
 		skip:;
+		} else {
+			i++;
 		}
-		i++;
 	}
 	t->text[2*t->count] = string_copy(str, start, str->len);
 	return t;
