@@ -1,4 +1,13 @@
+{# A basic template #}
 <!DOCTYPE html>
 <html>
-{{ HTML }}
+{{ HTML -}}
+{% if FOO != none -%}
+<p>Foo is {{ FOO }}</p>
+{% else -%}
+<h4>:o</h4>
+	{%- if BAR == "baz" %}
+<p>Foo bar baz</p>
+	{%- end -%}
+{% end %}
 </html>
