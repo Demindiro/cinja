@@ -81,3 +81,21 @@ cinja_dict_entry_t cinja_dict_get(cinja_dict dict, string key)
 	}
 	return dict->entries[i];
 }
+
+
+cinja_dict_entry_t cinja_dict_iter(cinja_dict d, void **state)
+{
+	size_t *i;
+	if (state == NULL)
+		*state = calloc(sizeof(*i), 1);
+	i = *state;
+	if (*i >= d->count) {
+		free(*state);
+		*state = NULL;
+		cinja_dict_entry_t e = { 0 };
+		return e;
+	}
+	cinja_dict_entry_t e = d->entries[*i];
+	(*i)++;
+	return e;
+}
