@@ -86,7 +86,7 @@ cinja_dict_entry_t cinja_dict_get(cinja_dict dict, string key)
 cinja_dict_entry_t cinja_dict_iter(cinja_dict d, void **state)
 {
 	size_t *i;
-	if (state == NULL)
+	if (*state == NULL)
 		*state = calloc(sizeof(*i), 1);
 	i = *state;
 	if (*i >= d->count) {
