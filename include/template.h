@@ -6,13 +6,42 @@
 #include "dict.h"
 
 
+enum cinja_expr_type {
+	IF,
+	ELIF,
+	ELSE,
+	END,
+	FOR,
+};
+
+enum cinja_cmp {
+	 EQ,
+	NEQ,
+};
+
+
+typedef struct cinja_expr_arg {
+	string val;
+	int is_const : 1;
+} cinja_expr_arg_t, *cinja_expr_arg;
+
+typedef struct cinja_expr {
+	enum cinja_expr_type type;
+} cinja_expr_t, *cinja_expr;
+
+typedef struct cinja_expr_if {
+	enum cinja_expr_type type;
+	cinja_expr_arg_t arg_l, arg_r;
+	enum cinja_cmp cmp;
+} cinja_expr_if_t, *cinja_expr_if;
+
 typedef struct cinja_template {
 	size_t count;
 	union {
-		void **ptr;
-		string *vars;
-		string *text;
-		struct cinja_template **temps;
+		void      **ptr;
+		string     *vars;
+		string     *text;
+		cinja_expr *expr;
 	};
 	int *flags;
 } cinja_template_t, *cinja_template;
