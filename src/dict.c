@@ -82,20 +82,20 @@ cinja_dict_entry_t cinja_dict_get(cinja_dict dict, string key)
 	return dict->entries[i];
 }
 
-#if 0
-cinja_dict_entry_t cinja_dict_iter(cinja_dict dict, void *state)
+
+cinja_dict_entry_t cinja_dict_iter(cinja_dict d, void **state)
 {
-	cinja_dict_entry_t entry;
-	size_t *i = state;
-	if (i == NULL) {
-		i = state = malloc(sizeof(size_t));
-		*i = 0;
+	size_t *i;
+	if (*state == NULL)
+		*state = calloc(sizeof(*i), 1);
+	i = *state;
+	if (*i >= d->count) {
+		free(*state);
+		*state = NULL;
+		cinja_dict_entry_t e = { 0 };
+		return e;
 	}
-	if (*i >= dict->count) {
-		free(i);
-		state = NULL;
-		return entry;
-	}
-	
+	cinja_dict_entry_t e = d->entries[*i];
+	(*i)++;
+	return e;
 }
-#endif

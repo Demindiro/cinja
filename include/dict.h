@@ -54,12 +54,10 @@ int _cinja_dict_set(cinja_dict dict, string key, void *value, int type);
 cinja_dict_entry_t cinja_dict_get(cinja_dict dict, string key);
 
 
-#if 0
 /*
- * Iterate over all values in the dictionary.
+ * Iterates over all values of a dictionary
  */
-cinja_dict_entry_t cinja_dict_iter(cinja_dict dict, void *state);
-#endif
+cinja_dict_entry_t cinja_dict_iter(cinja_dict dict, void **state);
 
 
 #endif
