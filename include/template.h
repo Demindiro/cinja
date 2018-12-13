@@ -43,7 +43,7 @@ typedef struct cinja_template {
 		string     *text;
 		cinja_expr *expr;
 	};
-	int *flags;
+	unsigned char *flags;
 } cinja_template_t, *cinja_template;
 
 

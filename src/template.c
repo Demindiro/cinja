@@ -2,19 +2,15 @@
 #include "../lib/string/include/string.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 
-#define FLAG_TYPE       0xF
-#define FLAG_TYPE_SUBST 0x1
-#define FLAG_TYPE_EXPR  0x2
-
+#define CINJA_TYPE         0xF
+#define CINJA_TYPE_SUBST   0x1
+#define CINJA_TYPE_EXPR    0x2
+#define CINJA_TYPE_COMMENT 0x3
 
 static string nullstr;
-
-__attribute__((constructor))
-void init_nullstr() {
-	nullstr = string_create("NULL");
-}
 
 
 /*
@@ -171,7 +167,7 @@ cinja_template cinja_create(string str)
 				if (i - 1 >= str->len || str->buf[i] != '}' || str->buf[i+1] != '}')
 					goto error;
 
-				t->flags[t->count] = FLAG_TYPE_SUBST;
+				t->flags[t->count] = CINJA_TYPE_SUBST;
 			} else if (str->buf[i] == '%') {
 				i++;
 				size_t j = i;
@@ -182,7 +178,7 @@ cinja_template cinja_create(string str)
 					goto error;
 				t->expr[2*t->count + 1] = e;
 
-				t->flags[t->count] = FLAG_TYPE_EXPR;
+				t->flags[t->count] = CINJA_TYPE_EXPR;
 			} else {
 				goto skip;
 			}
@@ -190,8 +186,9 @@ cinja_template cinja_create(string str)
 			start = i + 2;
 			t->count++;
 		skip:;
+		} else {
+			i++;
 		}
-		i++;
 	}
 	t->text[2*t->count] = string_copy(str, start, str->len);
 	return t;
@@ -227,14 +224,15 @@ void cinja_free(cinja_template temp)
 {
 	for (size_t i = 0; i < temp->count; i++) {
 		free(temp->text[i*2]);
-		switch (temp->flags[i] & FLAG_TYPE) {
-		case FLAG_TYPE_SUBST:
-			free(temp->vars[i*2 + 1]);
-			break;
-		case FLAG_TYPE_EXPR:
-			/* TODO */
-			break;
+		if (temp->flags[i] & CINJA_TYPE_EXPR) {
+			enum cinja_expr_type t = temp->expr[i*2 + 1]->type;
+			if (t == IF) {
+				cinja_expr_if e = (cinja_expr_if)temp->expr[i*2 + 1];
+				free(e->arg_l.val);
+				free(e->arg_r.val);
+			}
 		}
+		free(temp->ptr[i*2 + 1]);
 	}
 	free(temp->text[temp->count*2]);
 	free(temp->ptr);
@@ -246,18 +244,17 @@ void cinja_free(cinja_template temp)
 string cinja_render(cinja_template temp, cinja_dict dict)
 {
 	string *strs = malloc(sizeof(*strs) * (2 * temp->count + 1));
-	strs[0] = temp->text[0];
 	size_t count = 0;
 	int skip_else[16] = { 0 };
 	int skip_else_i   =  -1  ;
 	for (size_t i = 0; i < temp->count; i++) {
 		strs[count++] = temp->text[2*i];
-		switch (temp->flags[i] & FLAG_TYPE) {
-		case FLAG_TYPE_SUBST:;
+		switch (temp->flags[i] & CINJA_TYPE) {
+		case CINJA_TYPE_SUBST:;
 			cinja_dict_entry_t entry = cinja_dict_get(dict, temp->vars[i*2 + 1]);
 			strs[count++] = entry.value == NULL ? nullstr : entry.value;
 			break;
-		case FLAG_TYPE_EXPR:
+		case CINJA_TYPE_EXPR:
 			switch (temp->expr[i*2 + 1]->type) {
 			case ELIF:
 				if (skip_else[skip_else_i])
@@ -279,7 +276,7 @@ string cinja_render(cinja_template temp, cinja_dict dict)
 					skip_else[++skip_else_i] = 1;
 				} else {
 					skip_else[++skip_else_i] = 0;
-					while (((temp->flags[i] & FLAG_TYPE) != FLAG_TYPE_EXPR) ||
+					while (((temp->flags[i] & CINJA_TYPE) != CINJA_TYPE_EXPR) ||
 					       (temp->expr[i*2 + 1]->type != END))
 						i++;
 				}
@@ -289,7 +286,7 @@ string cinja_render(cinja_template temp, cinja_dict dict)
 				break;
 			case ELSE:
 				if (skip_else[skip_else_i]) {
-					while (((temp->flags[i] & FLAG_TYPE) != FLAG_TYPE_EXPR) ||
+					while (((temp->flags[i] & CINJA_TYPE) != CINJA_TYPE_EXPR) ||
 					       (temp->expr[i*2 + 1]->type != END))
 						i++;
 				}
