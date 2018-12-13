@@ -5,33 +5,12 @@
 #include <string.h>
 
 
+#define CINJA_TYPE         0xF
+#define CINJA_TYPE_SUBST   0x1
+#define CINJA_TYPE_EXPR    0x2
+#define CINJA_TYPE_COMMENT 0x3
+
 static string nullstr;
-static string emptystr;
-static string op_eq;
-static string op_neq;
-#if 0
-static string op_lt;
-static string op_gt;
-static string op_leq;
-static string op_geq;
-static string op_is;
-#endif
-
-
-__attribute__((constructor))
-void init_static_strs() {
-	nullstr = string_create("");
-	emptystr = nullstr;
-	op_eq   = string_create("==");
-	op_neq  = string_create("!=");
-#if 0
-	op_lt   = string_create("<" );
-	op_gt   = string_create(">" );
-	op_leq  = string_create("<=");
-	op_geq  = string_create(">=");
-	op_is   = string_create("is");
-#endif
-}
 
 
 /*
@@ -69,210 +48,142 @@ static int _skip_until(string str, size_t *i, const char *chars)
 }
 
 
-/*
- * Expressions 
- */
-static cinja_expr_if parse_if(string str, size_t *i)
+static cinja_expr _parse_expr_if(string str, enum cinja_expr_type type)
 {
-	cinja_expr_if e = calloc(sizeof(*e), 1);
+	size_t        i = 0;
+	cinja_expr_if e = malloc(sizeof(*e));
 
-	// var	
-	if (!_skip_while(str, i, " \t\n"))
-		goto error;
-	size_t start = *i;
-	if (!_skip_until(str, i, " \t\n=!<>"))
-		goto error;
-	e->var = string_copy(str, start, *i);
-	if (e->var == NULL || !_skip_while(str, i, " \t\n"))
-		goto error;
+	if (!_skip_while(str, &i, " \t\n"))
+		return NULL;
 
-	// op
-	char c = str->buf[*i];
-	(*i)++;
-	switch (c) {
-	case '=':
-	case '!':
-		if (str->buf[*i] != '=')
-			goto error;
-		e->op = c == '=' ? CINJA_EXPR_OP_EQ : CINJA_EXPR_OP_NEQ;
-		(*i)++;
-		break;
-#if 0
-	case '<':
-		if (str->buf[*i] == '=') {
-			 e->op = CINJA_EXPR_OP_LEQ;
-			(*i)++;
-		} else {
-			e->op = CINJA_EXPR_OP_LT;
-		}
-		break;
-	case '>':
-		if (str->buf[*i] == '=') {
-			 e->op = CINJA_EXPR_OP_GEQ;
-			(*i)++;
-		} else {
-			e->op = CINJA_EXPR_OP_GT;
-		}
-		break;
-#endif
-	default:
-		goto error;
+	size_t j = i;
+	const char *s = str->buf[i] == '"' ? "\"" : " \t\n!=";
+	if (!_skip_until(str, &i, s))
+		return NULL;
+	e->arg_l.val = string_copy(str, j, i);
+	e->arg_l.is_const = s[0] == '"';
+	if (!e->arg_l.is_const && string_eq(e->arg_l.val, "none")) {
+		free(e->arg_l.val);
+		e->arg_l.val = NULL;
 	}
 
-	// val
-	if (!_skip_while(str, i, " \t\n"))
-		goto error;
-	if (str->buf[*i] == '"') {
-		size_t start = *i + 1;
-		do {
-			(*i)++;
-			if (str->buf[*i] == 0)
-				goto error;
-		} while (str->buf[*i] != '"');
-		e->val = string_copy(str, start, *i);
-		(*i)++;
-	} else if (strncmp(&str->buf[*i], "none", 4) == 0) {
-		*i += 4;
-		char c = str->buf[*i];
-		if (c != ' ' && c != '\t' && c != '\n')
-			goto error;
-		e->val = NULL;
-	} else {
-		goto error;
+	if (!_skip_while(str, &i, " \t\n"))
+		return NULL;
+	j = i;
+	if (!_skip_until(str, &i, " \t\n\""))
+		return NULL;
+	string cmp = string_copy(str, j, i);
+	if (string_eq(cmp, "=="))
+		e->cmp = EQ;
+	else if (string_eq(cmp, "!="))
+		e->cmp = NEQ;
+	else
+		return NULL;
+	if (!_skip_while(str, &i, " \t\n"))
+		return NULL;
+
+	j = i;
+	s = str->buf[i] == '"' ? "\"" : " \t\n";
+	if (!_skip_until(str, &i, s))
+		return NULL;
+	e->arg_r.val = string_copy(str, j, i);
+	e->arg_r.is_const = s[0] == '"';
+	if (!e->arg_l.is_const && string_eq(e->arg_l.val, "none")) {
+		free(e->arg_l.val);
+		e->arg_l.val = NULL;
 	}
 
-	return e;
-error:
-	free(e->var);
-	free(e->val);
-	free(e);
-	return NULL;
+	e->type = type;
+	return (cinja_expr)e;
 }
 
+
+static cinja_expr _parse_expr(string str, size_t start, size_t end)
+{
+	size_t i = start;
+	if (!_skip_while(str, &i, " \t\n"))
+		return NULL;
+	size_t j = i;
+	if (!_skip_until(str, &i, " \t\n"))
+		return NULL;
+	string type = string_copy(str, j, i);
+	cinja_expr e;
+	string stre = string_copy(str, i, end);
+	if (string_eq(type, "if")) {
+		e = _parse_expr_if(stre, IF);
+	} else if (string_eq(type, "elif")) {
+		e = _parse_expr_if(stre, ELIF);
+	} else if (string_eq(type, "else")) {
+		e = malloc(sizeof(*e));
+		e->type = ELSE;
+	} else if (string_eq(type, "end")) {
+		e = malloc(sizeof(*e));
+		e->type = END;
+	} else if (string_eq(type, "for")) {
+		e = NULL;
+	} else {
+		e = NULL;
+	}
+	free(type);
+	free(stre);
+	return e;
+}
 
 
 /*
  * Public
  */
-cinja_template cinja_create_from_string(string str)
+cinja_template cinja_create(string str)
 {
 	cinja_template t = malloc(sizeof(*t));
-	size_t s = 128;
-	t->ptr = malloc(sizeof(*t->ptr) * s);
-	t->types = malloc(sizeof(*t->types) * s);
+	size_t s = 16;
+	t->ptr = malloc(sizeof(*t->ptr) * s * 2 + 1);
+	t->flags = malloc(sizeof(*t->flags) * s);
 	t->count = 0;
 
-	int    type_stack[16];
-	size_t type_stack_i = 0;
 	size_t i = 0, start = i;
-	int trim_next = 0;
 	while (i < str->len) {
 		if (str->buf[i] == '{') {
-			size_t end = i;
+			size_t end = i - 1;
 			i++;
 			if (i >= str->len)
 				break;
-			char c = str->buf[i];
-			i++;
-
-			int trim_prev = str->buf[i] == '-';
-			if (trim_prev)
+			
+			if (str->buf[i] == '{') {
 				i++;
-			if (trim_next) {
-				_skip_while(str, &start, " \t\n");
-				trim_next = 0;
-			}
+				if (!_skip_while(str, &i, " \t\n"))
+					goto error;
+				size_t s = i;
+				if (!_skip_until(str, &i, " \t\n}"))
+					goto error;
 
-			if (!_skip_while(str, &i, " \t\n"))
-				goto error;
-			size_t s = i;
-			if (!_skip_until(str, &i, " \t\n"))
-				goto error;
-			switch (c) {
-			case '{':
-				c = '}';
 				string var = string_copy(str, s, i);
 				if (var == NULL)
 					goto error;
 				t->vars[2*t->count + 1] = var;
-				t->types[t->count] = CINJA_TYPE_SUBST;
-				break;
-			case '%':
-				switch (i - s) {
-				case 2:
-					if (memcmp(&str->buf[s], "if", 2) == 0) {
-						void *e = t->expr_ifs[t->count*2 + 1] = parse_if(str, &i);
-						if (e == NULL)
-							goto error;
-						t->types[t->count] = CINJA_TYPE_IF;
-					}
-					break;
-				case 3:
-					if (memcmp(&str->buf[s], "end", 3) == 0) {
-						t->types[t->count] = CINJA_TYPE_ENDIF;
-					}
-					break;
-#if 0
-				case 3:
-					if (memcmp(&str->buf[i], "for", 3) == 0 {
-						t->expr_fors[t->count] = parse_for(str, &i);
-						if (t->expr_fors[t->count] == NULL)
-							goto error;
-						t->types[t->count] = CINJA_TYPE_FOR;
-					}
-					break;
-#endif
-				case 4:
-					if (memcmp(&str->buf[s], "elif", 4) == 0) {
-						void *e = t->expr_ifs[t->count*2 + 1] = parse_if(str, &i);
-						if (e == NULL)
-							goto error;
-						t->types[t->count] = CINJA_TYPE_ELIF;
-					} else if (memcmp(&str->buf[s], "else", 4) == 0) {
-						t->types[t->count] = CINJA_TYPE_ELSE;
-					} else {
-						goto error;
-					}
-					break;
-				default:
-					goto error;
-				}
 
-				break;
-			case '#':
-				while (1) {
-					if (str->buf[i] == '#' && str->buf[i+1] == '}')
-						break;
-					i++;
-				}
-				trim_next = str->buf[i-1] == '-';
-				t->types[t->count] = CINJA_TYPE_COMMENT;
-				goto comment;
-			default:
+				if (!_skip_while(str, &i, " \t\n"))
+					goto error;
+				if (i - 1 >= str->len || str->buf[i] != '}' || str->buf[i+1] != '}')
+					goto error;
+
+				t->flags[t->count] = CINJA_TYPE_SUBST;
+			} else if (str->buf[i] == '%') {
+				i++;
+				size_t j = i;
+				if (!_skip_until(str, &i, "%"))
+					goto error;
+				cinja_expr e = _parse_expr(str, j, i);
+				if (e == NULL)
+					goto error;
+				t->expr[2*t->count + 1] = e;
+
+				t->flags[t->count] = CINJA_TYPE_EXPR;
+			} else {
 				goto skip;
 			}
-
-			if (!_skip_while(str, &i, " \t\n"))
-				goto error;
-			trim_next = str->buf[i] == '-';
-			if (trim_next)
-				i++;
-			if (str->buf[i] != c || str->buf[i + 1] != '}') {
-				free(t->ptr[t->count*2 + 1]);
-				goto error;
-			}
-		comment:
-			if (trim_prev) {
-				while (1) {
-					char c = str->buf[end - 1];
-					if (c != ' ' && c != '\t' && c != '\n')
-						break;
-					end--;
-				}
-			}
-			t->text[2*t->count] = string_copy(str, start, end);
-			i += 2;
-			start = i;
+			t->text[2*t->count] = string_copy(str, start, end + 1);
+			start = i + 2;
 			t->count++;
 		skip:;
 		} else {
@@ -303,7 +214,7 @@ cinja_template cinja_create_from_file(const char *path)
 	str->buf[len] = 0;
 	fclose(f);
 
-	cinja_template t = cinja_create_from_string(str);
+	cinja_template t = cinja_create(str);
 	free(str);
 	return t;
 }
@@ -313,107 +224,83 @@ void cinja_free(cinja_template temp)
 {
 	for (size_t i = 0; i < temp->count; i++) {
 		free(temp->text[i*2]);
-		switch (temp->types[i]) {
-		case CINJA_TYPE_IF:
-		case CINJA_TYPE_ELIF:
-			free(temp->expr_ifs[i*2 + 1]->var);
-			free(temp->expr_ifs[i*2 + 1]->val);
-		case CINJA_TYPE_SUBST:
-			free(temp->ptr[i*2 + 1]);
-		case CINJA_TYPE_COMMENT:
-		case CINJA_TYPE_ELSE:
-		case CINJA_TYPE_ENDIF:
-#if 0
-		case CINJA_TYPE_ENDFOR:
-#endif
-			break;
+		if (temp->flags[i] & CINJA_TYPE_EXPR) {
+			enum cinja_expr_type t = temp->expr[i*2 + 1]->type;
+			if (t == IF) {
+				cinja_expr_if e = (cinja_expr_if)temp->expr[i*2 + 1];
+				free(e->arg_l.val);
+				free(e->arg_r.val);
+			}
 		}
+		free(temp->ptr[i*2 + 1]);
 	}
 	free(temp->text[temp->count*2]);
 	free(temp->ptr);
-	free(temp->types);
+	free(temp->flags);
 	free(temp);
 }
 
 
 string cinja_render(cinja_template temp, cinja_dict dict)
 {
-	size_t n = 1;
 	string *strs = malloc(sizeof(*strs) * (2 * temp->count + 1));
-	strs[0] = temp->text[0];
-	char   skip_else[16];
-	size_t skip_else_i = 0;
-	size_t for_loop_index[16];
-	void  *for_loop_state[16];
-	size_t for_loop_i = 0;
-	memset(for_loop_state, 0, sizeof(for_loop_state));
-
+	size_t count = 0;
+	int skip_else[16] = { 0 };
+	int skip_else_i   =  -1  ;
 	for (size_t i = 0; i < temp->count; i++) {
-		switch (temp->types[i]) {
-
-		case CINJA_TYPE_SUBST: {
-			cinja_dict_entry_t e = cinja_dict_get(dict, temp->vars[i*2 + 1]);
-			strs[n] = e.value == NULL ? nullstr : e.value;
-			n++;
+		strs[count++] = temp->text[2*i];
+		switch (temp->flags[i] & CINJA_TYPE) {
+		case CINJA_TYPE_SUBST:;
+			cinja_dict_entry_t entry = cinja_dict_get(dict, temp->vars[i*2 + 1]);
+			strs[count++] = entry.value == NULL ? nullstr : entry.value;
 			break;
-		}
-
-		case CINJA_TYPE_COMMENT:
-			break;
-
-		case CINJA_TYPE_ELIF:
-			if (skip_else[skip_else_i]) {
-				do {
-					i++;
-				} while (temp->types[i] != CINJA_TYPE_ENDIF);
+		case CINJA_TYPE_EXPR:
+			switch (temp->expr[i*2 + 1]->type) {
+			case ELIF:
+				if (skip_else[skip_else_i])
+					break;
+			case IF: {
+				cinja_expr_if e = (cinja_expr_if)temp->expr[i*2 + 1];
+				string val_l = e->arg_l.is_const ? e->arg_l.val : cinja_dict_get(dict, e->arg_l.val).value;
+				string val_r = e->arg_r.is_const ? e->arg_r.val : cinja_dict_get(dict, e->arg_r.val).value;
+				enum cinja_cmp cmp;
+				if (val_l == NULL && val_r == NULL)
+					cmp = EQ;
+				else if ((val_l == NULL && val_r != NULL) || (val_l != NULL && val_r == NULL))
+					cmp = NEQ;
+				else if (string_eq(val_l, val_r))
+					cmp = EQ;
+				else
+					cmp = NEQ;
+				if (cmp == e->cmp) {
+					skip_else[++skip_else_i] = 1;
+				} else {
+					skip_else[++skip_else_i] = 0;
+					while (((temp->flags[i] & CINJA_TYPE) != CINJA_TYPE_EXPR) ||
+					       (temp->expr[i*2 + 1]->type != END))
+						i++;
+				}
 			}
-		case CINJA_TYPE_IF: {
-			cinja_expr_if expr = temp->expr_ifs[i*2 + 1];
-			cinja_dict_entry_t e = cinja_dict_get(dict, expr->var);
-			int eq = expr->val == NULL && e.value == NULL;
-			if (!eq && expr->val != NULL && e.value != NULL)
-				eq = string_eq(e.value, expr->val);
-			if (eq != (expr->op == CINJA_EXPR_OP_EQ)) {
-				int f;
-				do {
-					i++;
-					f = temp->types[i];
-				} while (f != CINJA_TYPE_ENDIF && f != CINJA_TYPE_ELSE && f != CINJA_TYPE_ELIF);
-			} else {
-				skip_else[skip_else_i++] = 1;
+			case END:
+				skip_else_i--;
+				break;
+			case ELSE:
+				if (skip_else[skip_else_i]) {
+					while (((temp->flags[i] & CINJA_TYPE) != CINJA_TYPE_EXPR) ||
+					       (temp->expr[i*2 + 1]->type != END))
+						i++;
+				}
+				break;
+			case FOR:
+				break; // TODO
 			}
 			break;
-		}
-		case CINJA_TYPE_ELSE:
-			if (skip_else[skip_else_i]) {
-				do {
-					i++;
-				} while (temp->types[i] != CINJA_TYPE_ENDIF);
-			}
-			break;
-		case CINJA_TYPE_ENDIF:
-			skip_else_i--;
-			break;
-#if 0
-		case CINJA_TYPE_FOR:
-			cinja_dict_entry_t entry = 
-			break;
-		case CINJA_TYPE_ENDFOR:
-			if (for_loop_state[for_loop_i] == NULL) {
-				for_loop_i--;
-			} else {
-				i = for_loop_index
-			}
-#endif
 		default:
-			return NULL;
-			break; // TODO
+			return NULL; // TODO
 		}
-		strs[n] = temp->text[i*2 + 2];
-		n++;
 	}
-	strs[n] = temp->text[temp->count*2];
-	string render = string_concat(strs, n);
+	strs[count++] = temp->text[2*temp->count];
+	string render = string_concat(strs, count);
 	free(strs);
 	return render;
 }

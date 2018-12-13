@@ -6,53 +6,44 @@
 #include "dict.h"
 
 
-#define CINJA_MASK_TYPE    0xF
-#define CINJA_TYPE_SUBST   0x1
-#define CINJA_TYPE_COMMENT 0x2
-#define CINJA_TYPE_IF      0x3
-#define CINJA_TYPE_ELIF    0x4
-#define CINJA_TYPE_ELSE    0x5
-#define CINJA_TYPE_ENDIF   0x6
-#if 0
-#define CINJA_TYPE_FOR     0x7
-#define CINJA_TYPE_ENDFOR  0x8
-#endif
+enum cinja_expr_type {
+	IF,
+	ELIF,
+	ELSE,
+	END,
+	FOR,
+};
 
-#define CINJA_EXPR_OP_EQ  0X1
-#define CINJA_EXPR_OP_NEQ 0x2
-#if 0
-#define CINJA_EXPR_OP_LT  0x3
-#define CINJA_EXPR_OP_GT  0x4
-#define CINJA_EXPR_OP_LEQ 0x5
-#define CINJA_EXPR_OP_GEQ 0x6
-#endif
+enum cinja_cmp {
+	 EQ,
+	NEQ,
+};
 
 
-typedef struct cinja_expr_for {
-	string var;
+typedef struct cinja_expr_arg {
 	string val;
-} *cinja_expr_for;
+	int is_const : 1;
+} cinja_expr_arg_t, *cinja_expr_arg;
 
+typedef struct cinja_expr {
+	enum cinja_expr_type type;
+} cinja_expr_t, *cinja_expr;
 
 typedef struct cinja_expr_if {
-	string var;
-	string val;
-	unsigned int op : 3;
-} *cinja_expr_if;
-
+	enum cinja_expr_type type;
+	cinja_expr_arg_t arg_l, arg_r;
+	enum cinja_cmp cmp;
+} cinja_expr_if_t, *cinja_expr_if;
 
 typedef struct cinja_template {
 	size_t count;
 	union {
-		void **ptr;
-
-		string *text;
-	
-		string *vars;
-		cinja_expr_if  *expr_ifs;
-		cinja_expr_for *expr_fors;
+		void      **ptr;
+		string     *vars;
+		string     *text;
+		cinja_expr *expr;
 	};
-	unsigned char *types;
+	unsigned char *flags;
 } cinja_template_t, *cinja_template;
 
 
