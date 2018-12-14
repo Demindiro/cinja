@@ -42,29 +42,25 @@ cinja_dict cinja_dict_create()
 
 void cinja_dict_free(cinja_dict d)
 {
-	for (size_t i = 0; i < d->count; i++) {
-		free(d->entries[i].value);
+	for (size_t i = 0; i < d->count; i++)
 		free(d->entries[i].key);
-	}
 	free(d->entries);
 	free(d);
 }
 
 
-int _cinja_dict_set(cinja_dict dict, string key, void *value, int type)
+int _cinja_dict_set(cinja_dict dict, string key, void *value, enum cinja_type type)
 {
-	if (type < 0 || CINJA_DICT_TYPE_MAX < type) {
-		errno = EINVAL;
-		return -1;
-	}
 	size_t i = _get_index(dict, key);
 	if (i == -1) {
 		i = dict->count;
 		if (dict->size <= dict->count && _grow_dict(dict) < 0)
 			return -1;
 		dict->count++;
+		dict->entries[i].key   = key;
+	} else {
+		free(key);
 	}
-	dict->entries[i].key   = key;
 	dict->entries[i].value = value;
 	dict->entries[i].type  = type;
 	return 0;

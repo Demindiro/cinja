@@ -19,7 +19,6 @@ enum cinja_cmp {
 	NEQ,
 };
 
-
 typedef struct cinja_expr_arg {
 	string val;
 	int is_const : 1;
@@ -35,13 +34,26 @@ typedef struct cinja_expr_if {
 	enum cinja_cmp cmp;
 } cinja_expr_if_t, *cinja_expr_if;
 
+typedef struct cinja_expr_for {
+	enum cinja_expr_type type;
+	string iterator;
+	string var;
+} cinja_expr_for_t, *cinja_expr_for;
+
+
+typedef struct cinja_subst {
+	string var;
+	string func;
+} cinja_subst_t, *cinja_subst;
+
+
 typedef struct cinja_template {
 	size_t count;
 	union {
-		void      **ptr;
-		string     *vars;
-		string     *text;
-		cinja_expr *expr;
+		void       **ptr  ;
+		string      *text ;
+		cinja_subst *subst;
+		cinja_expr  *expr ;
 	};
 	unsigned char *flags;
 } cinja_template_t, *cinja_template;
