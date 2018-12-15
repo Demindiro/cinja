@@ -42,8 +42,10 @@ typedef struct cinja_expr_for {
 
 
 typedef struct cinja_subst {
-	string var;
-	string func;
+	size_t  varcount;
+	size_t  funccount;
+	string *vars;
+	string *funcs;
 } cinja_subst_t, *cinja_subst;
 
 

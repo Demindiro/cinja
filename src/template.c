@@ -203,21 +203,28 @@ cinja_template cinja_create(string str)
 
 				cinja_subst s = malloc(sizeof(*s));
 				if (str->buf[i] == '(') {
-					s->func  = string_copy(str, j, i);
+					string funcs = string_copy(str, j, i);
+					s->funcs = string_split(funcs, '.', &s->funccount);
+					free(funcs);
 					i++;
 					if (!_skip_while(str, &i, " \t\n"))
 						goto error;
 					j = i;
 					if (!_skip_until(str, &i, " \t\n)"))
 						goto error;
-					s->var   = string_copy(str, j, i);
+					string vars = string_copy(str, j, i);
+					s->vars = string_split(vars, '.', &s->varcount);
+					free(vars);
 					if (!_skip_until(str, &i, ")"))
 						goto error;
 					i++;
 				} else {
-					s->func = NULL;
-					s->var  = string_copy(str, j, i);
-					if (s->var == NULL)
+					s->funcs = NULL;
+					s->funccount = 0;
+					string vars = string_copy(str, j, i);
+					s->vars = string_split(vars, '.', &s->varcount);
+					free(vars);
+					if (s->vars == NULL)
 						goto error;
 				}
 
@@ -296,8 +303,13 @@ void cinja_free(cinja_template temp)
 				free(e->var);
 			}
 		} else {
-			free(temp->subst[i*2 + 1]->func);
-			free(temp->subst[i*2 + 1]->var );
+			cinja_subst s = temp->subst[i*2 + 1];
+			for (size_t k = 0; k < s->varcount ; k++)
+				free(s->vars [k]);
+			for (size_t k = 0; k < s->funccount; k++)
+				free(s->funcs[k]);
+			free(s->funcs);
+			free(s->vars );
 		}
 		free(temp->ptr[i*2 + 1]);
 	}
@@ -334,6 +346,21 @@ static void _cinja_render_skip_scope(cinja_template temp, size_t *index)
 	*index = i;
 }
 
+
+static cinja_dict_entry_t _cinja_render_get_var(string *vars, size_t count, cinja_dict dict)
+{
+	cinja_dict_entry_t e = cinja_dict_get(dict, vars[0]);
+	for (size_t i = 1; i < count; i++) {
+		if (e.value == NULL || e.type != DICT) {
+			e.value = NULL;
+			return e;
+		}
+		e = cinja_dict_get(e.value, vars[i]);
+	}
+	return e;
+}
+
+
 string cinja_render(cinja_template temp, cinja_dict dict)
 {
 	string *strs = malloc(1024 * sizeof(*strs));
@@ -350,15 +377,17 @@ string cinja_render(cinja_template temp, cinja_dict dict)
 		switch (temp->flags[i] & CINJA_TYPE) {
 		case CINJA_TYPE_SUBST:;
 			cinja_subst s = temp->subst[i*2 + 1];
-			cinja_dict_entry_t var = cinja_dict_get(locals, s->var);
+			cinja_dict_entry_t var = _cinja_render_get_var(s->vars, s->varcount, locals);
 			if (var.value == NULL)
-				var = cinja_dict_get(dict, s->var);
-			if (s->func == NULL) {
+				var = _cinja_render_get_var(s->vars, s->varcount, dict);
+			if (s->funcs == NULL) {
+				if (var.value != NULL && var.type != STRING)
+					return NULL;
 				strs[count++] = var.value == NULL ? nullstr : var.value;
 			} else {
 				if (var.value == NULL || var.type != DICT)
 					return NULL;
-				cinja_dict_entry_t func = cinja_dict_get(dict, s->func);
+				cinja_dict_entry_t func = _cinja_render_get_var(s->funcs, s->funccount, dict);
 				if (func.type != TEMPLATE)
 					return NULL;
 				string render = cinja_render(func.value, var.value);
