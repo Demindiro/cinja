@@ -4,6 +4,9 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "../include/dict.h"
+#include "../include/list.h"
+
 
 #define CINJA_TYPE         0xF
 #define CINJA_TYPE_SUBST   0x1
@@ -11,6 +14,13 @@
 #define CINJA_TYPE_COMMENT 0x3
 
 static string nullstr;
+
+
+__attribute__((constructor))
+static void init()
+{
+	nullstr = string_create("NULL");
+}
 
 
 /*
@@ -53,9 +63,6 @@ static cinja_expr _parse_expr_if(string str, enum cinja_expr_type type)
 	size_t        i = 0;
 	cinja_expr_if e = malloc(sizeof(*e));
 
-	if (!_skip_while(str, &i, " \t\n"))
-		return NULL;
-
 	size_t j = i;
 	const char *s = str->buf[i] == '"' ? "\"" : " \t\n!=";
 	if (!_skip_until(str, &i, s))
@@ -79,6 +86,7 @@ static cinja_expr _parse_expr_if(string str, enum cinja_expr_type type)
 		e->cmp = NEQ;
 	else
 		return NULL;
+	free(cmp);
 	if (!_skip_while(str, &i, " \t\n"))
 		return NULL;
 
@@ -98,17 +106,53 @@ static cinja_expr _parse_expr_if(string str, enum cinja_expr_type type)
 }
 
 
-static cinja_expr _parse_expr(string str, size_t start, size_t end)
+static cinja_expr _parse_expr_for(string str, enum cinja_expr_type type)
 {
-	size_t i = start;
+	cinja_expr_for e = malloc(sizeof(*e));
+	size_t i = 0;
+	
+	if (!_skip_until(str, &i, " \t\n"))
+		return NULL;
+	e->iterator = string_copy(str, 0, i);
+
 	if (!_skip_while(str, &i, " \t\n"))
 		return NULL;
 	size_t j = i;
 	if (!_skip_until(str, &i, " \t\n"))
 		return NULL;
+	string op = string_copy(str, j, i);
+	if (string_eq(op, "in")) {
+		if (!_skip_while(str, &i, " \t\n"))
+			return NULL;
+		size_t j = i;
+		_skip_until(str, &i, " \t\n");
+		e->var = string_copy(str, j, i);
+	} else {
+		return NULL;
+	}
+	free(op);
+
+	e->type = type;
+	return (cinja_expr)e;
+}
+
+
+static cinja_expr _parse_expr(string str, size_t start, size_t end)
+{
+	size_t i = start;
+	if (!_skip_while(str, &i, " \t\n"))
+		return NULL;
+
+	size_t j = i;
+	if (!_skip_until(str, &i, " \t\n"))
+		return NULL;
 	string type = string_copy(str, j, i);
-	cinja_expr e;
+
+	if (!_skip_while(str, &i, " \t\n"))
+		return NULL;
 	string stre = string_copy(str, i, end);
+
+	cinja_expr e;
 	if (string_eq(type, "if")) {
 		e = _parse_expr_if(stre, IF);
 	} else if (string_eq(type, "elif")) {
@@ -120,7 +164,7 @@ static cinja_expr _parse_expr(string str, size_t start, size_t end)
 		e = malloc(sizeof(*e));
 		e->type = END;
 	} else if (string_eq(type, "for")) {
-		e = NULL;
+		e = _parse_expr_for(stre, FOR);
 	} else {
 		e = NULL;
 	}
@@ -136,7 +180,7 @@ static cinja_expr _parse_expr(string str, size_t start, size_t end)
 cinja_template cinja_create(string str)
 {
 	cinja_template t = malloc(sizeof(*t));
-	size_t s = 16;
+	size_t s = 128;
 	t->ptr = malloc(sizeof(*t->ptr) * s * 2 + 1);
 	t->flags = malloc(sizeof(*t->flags) * s);
 	t->count = 0;
@@ -153,15 +197,38 @@ cinja_template cinja_create(string str)
 				i++;
 				if (!_skip_while(str, &i, " \t\n"))
 					goto error;
-				size_t s = i;
-				if (!_skip_until(str, &i, " \t\n}"))
+				size_t j = i;
+				if (!_skip_until(str, &i, " \t\n(}"))
 					goto error;
 
-				string var = string_copy(str, s, i);
-				if (var == NULL)
-					goto error;
-				t->vars[2*t->count + 1] = var;
+				cinja_subst s = malloc(sizeof(*s));
+				if (str->buf[i] == '(') {
+					string funcs = string_copy(str, j, i);
+					s->funcs = string_split(funcs, '.', &s->funccount);
+					free(funcs);
+					i++;
+					if (!_skip_while(str, &i, " \t\n"))
+						goto error;
+					j = i;
+					if (!_skip_until(str, &i, " \t\n)"))
+						goto error;
+					string vars = string_copy(str, j, i);
+					s->vars = string_split(vars, '.', &s->varcount);
+					free(vars);
+					if (!_skip_until(str, &i, ")"))
+						goto error;
+					i++;
+				} else {
+					s->funcs = NULL;
+					s->funccount = 0;
+					string vars = string_copy(str, j, i);
+					s->vars = string_split(vars, '.', &s->varcount);
+					free(vars);
+					if (s->vars == NULL)
+						goto error;
+				}
 
+				t->subst[2*t->count + 1] = s;
 				if (!_skip_while(str, &i, " \t\n"))
 					goto error;
 				if (i - 1 >= str->len || str->buf[i] != '}' || str->buf[i+1] != '}')
@@ -230,7 +297,19 @@ void cinja_free(cinja_template temp)
 				cinja_expr_if e = (cinja_expr_if)temp->expr[i*2 + 1];
 				free(e->arg_l.val);
 				free(e->arg_r.val);
+			} else if (t == FOR) {
+				cinja_expr_for e = (cinja_expr_for)temp->expr[i*2 + 1];
+				free(e->iterator);
+				free(e->var);
 			}
+		} else {
+			cinja_subst s = temp->subst[i*2 + 1];
+			for (size_t k = 0; k < s->varcount ; k++)
+				free(s->vars [k]);
+			for (size_t k = 0; k < s->funccount; k++)
+				free(s->funcs[k]);
+			free(s->funcs);
+			free(s->vars );
 		}
 		free(temp->ptr[i*2 + 1]);
 	}
@@ -241,25 +320,92 @@ void cinja_free(cinja_template temp)
 }
 
 
+
+static void _cinja_render_skip_scope(cinja_template temp, size_t *index)
+{
+	ssize_t count = 0;
+	 size_t     i = *index;
+	while (count >= 0) {
+		i++;
+		if ((temp->flags[i] & CINJA_TYPE) == CINJA_TYPE_EXPR) {
+			enum cinja_expr_type t = temp->expr[i*2 + 1]->type;
+	 		switch (t) {
+			case END:
+				count--;
+				break;
+			case IF:
+			case FOR:
+				count++;
+				break;
+			case ELIF:
+			case ELSE:
+				break;
+			}
+		}
+	}
+	*index = i;
+}
+
+
+static cinja_dict_entry_t _cinja_render_get_var(string *vars, size_t count, cinja_dict dict)
+{
+	cinja_dict_entry_t e = cinja_dict_get(dict, vars[0]);
+	for (size_t i = 1; i < count; i++) {
+		if (e.value == NULL || e.type != DICT) {
+			e.value = NULL;
+			return e;
+		}
+		e = cinja_dict_get(e.value, vars[i]);
+	}
+	return e;
+}
+
+
 string cinja_render(cinja_template temp, cinja_dict dict)
 {
-	string *strs = malloc(sizeof(*strs) * (2 * temp->count + 1));
+	string *strs = malloc(1024 * sizeof(*strs));
 	size_t count = 0;
-	int skip_else[16] = { 0 };
-	int skip_else_i   =  -1  ;
+	int  skip_else      [16] = { 0 };
+	int   for_loop      [16] = { 0 };
+	int   for_loop_start[16] = { 0 };
+	int   for_loop_end  [16] = { 0 };
+	int   for_loop_index[16] = { 0 };
+	size_t scope_i           =  -1  ;
+	cinja_dict locals        = cinja_dict_create();
 	for (size_t i = 0; i < temp->count; i++) {
 		strs[count++] = temp->text[2*i];
 		switch (temp->flags[i] & CINJA_TYPE) {
 		case CINJA_TYPE_SUBST:;
-			cinja_dict_entry_t entry = cinja_dict_get(dict, temp->vars[i*2 + 1]);
-			strs[count++] = entry.value == NULL ? nullstr : entry.value;
+			cinja_subst s = temp->subst[i*2 + 1];
+			cinja_dict_entry_t var = _cinja_render_get_var(s->vars, s->varcount, locals);
+			if (var.value == NULL)
+				var = _cinja_render_get_var(s->vars, s->varcount, dict);
+			if (s->funcs == NULL) {
+				if (var.value != NULL && var.type != STRING)
+					return NULL;
+				strs[count++] = var.value == NULL ? nullstr : var.value;
+			} else {
+				if (var.value == NULL || var.type != DICT)
+					return NULL;
+				cinja_dict_entry_t func = _cinja_render_get_var(s->funcs, s->funccount, dict);
+				if (func.type != TEMPLATE)
+					return NULL;
+				string render = cinja_render(func.value, var.value);
+				if (render == NULL)
+					return NULL;
+				strs[count++] = render;
+			}
 			break;
 		case CINJA_TYPE_EXPR:
 			switch (temp->expr[i*2 + 1]->type) {
 			case ELIF:
-				if (skip_else[skip_else_i])
+				if (skip_else[scope_i]) {
+					_cinja_render_skip_scope(temp, &i);
 					break;
+				}
+				scope_i--;
 			case IF: {
+				scope_i++;
 				cinja_expr_if e = (cinja_expr_if)temp->expr[i*2 + 1];
 				string val_l = e->arg_l.is_const ? e->arg_l.val : cinja_dict_get(dict, e->arg_l.val).value;
 				string val_r = e->arg_r.is_const ? e->arg_r.val : cinja_dict_get(dict, e->arg_r.val).value;
@@ -273,26 +419,50 @@ string cinja_render(cinja_template temp, cinja_dict dict)
 				else
 					cmp = NEQ;
 				if (cmp == e->cmp) {
-					skip_else[++skip_else_i] = 1;
+					skip_else[scope_i] = 1;
 				} else {
-					skip_else[++skip_else_i] = 0;
-					while (((temp->flags[i] & CINJA_TYPE) != CINJA_TYPE_EXPR) ||
-					       (temp->expr[i*2 + 1]->type != END))
-						i++;
+					skip_else[scope_i] = 0;
+					_cinja_render_skip_scope(temp, &i);
 				}
 			}
+			break;
 			case END:
-				skip_else_i--;
+				if (for_loop[scope_i]) {
+					for_loop_index[scope_i]++;
+					i = for_loop_start[scope_i] - 1;
+				}
+				scope_i--;
 				break;
 			case ELSE:
-				if (skip_else[skip_else_i]) {
-					while (((temp->flags[i] & CINJA_TYPE) != CINJA_TYPE_EXPR) ||
-					       (temp->expr[i*2 + 1]->type != END))
-						i++;
+				if (skip_else[scope_i]) {
+					_cinja_render_skip_scope(temp, &i);
 				}
 				break;
 			case FOR:
-				break; // TODO
+				scope_i++;
+				if (!for_loop[scope_i]) {
+					for_loop      [scope_i] = 1;
+					for_loop_start[scope_i] = i;
+					size_t j = i;
+					_cinja_render_skip_scope(temp, &j);
+					for_loop_end  [scope_i] = j - 1;
+					for_loop_index[scope_i] = 0;
+				} else {
+					count--;
+				}
+				cinja_expr_for     e = (cinja_expr_for)temp->expr[i*2 + 1];
+				cinja_dict_entry_t f = cinja_dict_get(dict, e->var);
+				if (f.type != LIST)
+					return NULL;
+				cinja_list l = f.value;
+				if (for_loop_index[scope_i] >= l->count) {
+					for_loop[scope_i] = 0;
+					i = for_loop_end[scope_i];
+				} else {
+					cinja_list_entry_t item = cinja_list_get(l, for_loop_index[scope_i]);
+					_cinja_dict_set(locals, string_copy(e->iterator), item.item, item.type);
+				}
+				break;
 			}
 			break;
 		default:
@@ -302,5 +472,6 @@ string cinja_render(cinja_template temp, cinja_dict dict)
 	strs[count++] = temp->text[2*temp->count];
 	string render = string_concat(strs, count);
 	free(strs);
+	cinja_dict_free(locals);
 	return render;
 }

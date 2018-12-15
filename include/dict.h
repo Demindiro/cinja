@@ -3,18 +3,14 @@
 
 
 #include "../lib/string/include/string.h"
-
-
-#define CINJA_DICT_TYPE        0xF
-#define CINJA_DICT_TYPE_STRING 0x0
-#define CINJA_DICT_TYPE_DICT   0x1
-#define CINJA_DICT_TYPE_MAX    0x1
+#include "list.h"
+#include "types.h"
 
 
 typedef struct cinja_dict_entry {
 	string  key;
 	void   *value;
-	int     type;
+	enum cinja_type type;
 } cinja_dict_entry_t;
 
 
@@ -25,6 +21,9 @@ typedef struct cinja_dict {
 } cinja_dict_t, *cinja_dict;
 
 
+#include "template.h"
+
+
 /*
  * Creates a new dictionary.
  */
@@ -33,7 +32,7 @@ cinja_dict cinja_dict_create();
 
 /*
  * Frees the resources used by a dictionary.
- * Both the keys and the values are freed.
+ * Only the keys are freed. Values must be freed manually.
  */
 void cinja_dict_free(cinja_dict dict);
 
@@ -43,10 +42,8 @@ void cinja_dict_free(cinja_dict dict);
  * Existing values are removed *without* `free`
  * NULL effectively removes the value for the given key.
  */
-int _cinja_dict_set(cinja_dict dict, string key, void *value, int type);
-#define cinja_dict_set(dict, key, value) _cinja_dict_set(dict, key, value, \
-	_Generic((value), string    : CINJA_DICT_TYPE_STRING, \
-	                  cinja_dict: CINJA_DICT_TYPE_DICT))
+int _cinja_dict_set(cinja_dict dict, string key, void *value, enum cinja_type type);
+#define cinja_dict_set(dict, key, value) _cinja_dict_set(dict, key, value, GET_TYPE(value))
 
 /*
  * Returns the value specified by the key or `{ .value = NULL }`
