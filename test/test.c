@@ -1,6 +1,5 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include "../lib/string/include/string.h"
 #include "../include/cinja.h"
 
 
