@@ -1,3 +1,6 @@
 [submodule "lib/string"]
 	path = lib/string
 	url = git@github.com:Demindiro/c-string.git
+[submodule "lib/temp-alloc"]
+	path = lib/temp-alloc
+	url = git@github.com:Demindiro/temp-alloc.git

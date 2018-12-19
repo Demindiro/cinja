@@ -2,7 +2,7 @@
 #define CINJA_DICT_H__
 
 
-#include "../lib/string/include/string.h"
+#include "cstring.h"
 #include "list.h"
 #include "types.h"
 

@@ -1,8 +1,9 @@
 #include "../include/template.h"
-#include "../lib/string/include/string.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "temp-alloc.h"
+#include "temp-cstring.h"
 
 #include "../include/dict.h"
 #include "../include/list.h"
@@ -361,9 +362,11 @@ static cinja_dict_entry_t _cinja_render_get_var(string *vars, size_t count, cinj
 }
 
 
-string cinja_render(cinja_template temp, cinja_dict dict)
+static string _cinja_render(cinja_template temp, cinja_dict dict, int is_temp)
 {
-	string *strs = malloc(1024 * sizeof(*strs));
+	if (!is_temp)
+		temp_alloc_push(1 << 20);
+	string *strs = temp_alloc(1024 * sizeof(*strs));
 	size_t count = 0;
 	int  skip_else      [16] = { 0 };
 	int   for_loop      [16] = { 0 };
@@ -390,7 +393,7 @@ string cinja_render(cinja_template temp, cinja_dict dict)
 				cinja_dict_entry_t func = _cinja_render_get_var(s->funcs, s->funccount, dict);
 				if (func.type != TEMPLATE)
 					return NULL;
-				string render = cinja_render(func.value, var.value);
+				string render = _cinja_render(func.value, var.value, 1);
 				if (render == NULL)
 					return NULL;
 				strs[count++] = render;
@@ -470,8 +473,18 @@ string cinja_render(cinja_template temp, cinja_dict dict)
 		}
 	}
 	strs[count++] = temp->text[2*temp->count];
-	string render = string_concat(strs, count);
-	free(strs);
 	cinja_dict_free(locals);
+	string render;
+	if (!is_temp) {
+		render = string_concat(strs, count);
+		temp_alloc_pop();
+	} else {
+		render = temp_string_concat(strs, count);
+	}
 	return render;
+}
+
+string cinja_render(cinja_template temp, cinja_dict dict)
+{
+	return _cinja_render(temp, dict, 0);
 }

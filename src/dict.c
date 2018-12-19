@@ -1,5 +1,5 @@
 #include "../include/dict.h"
-#include "../lib/string/include/string.h"
+#include "cstring.h"
 #include <errno.h>
 #include <stdlib.h>
 
