@@ -111,7 +111,7 @@ static cinja_expr _parse_expr_for(string str, enum cinja_expr_type type)
 {
 	cinja_expr_for e = malloc(sizeof(*e));
 	size_t i = 0;
-	
+
 	if (!_skip_until(str, &i, " \t\n"))
 		return NULL;
 	e->iterator = string_copy(str, 0, i);
@@ -193,7 +193,7 @@ cinja_template cinja_create(string str)
 			i++;
 			if (i >= str->len)
 				break;
-			
+
 			if (str->buf[i] == '{') {
 				i++;
 				if (!_skip_while(str, &i, " \t\n"))
@@ -275,7 +275,7 @@ cinja_template cinja_create_from_file(const char *path)
 	fseek(f, 0, SEEK_END);
 	len = ftell(f);
 	fseek(f, 0, SEEK_SET);
-	
+
 	string str = malloc(sizeof(str->len) + len + 1);
 	str->len = len;
 	fread(str->buf, len, 1, f);
@@ -463,7 +463,7 @@ static string _cinja_render(cinja_template temp, cinja_dict dict, int is_temp)
 					i = for_loop_end[scope_i];
 				} else {
 					cinja_list_entry_t item = cinja_list_get(l, for_loop_index[scope_i]);
-					_cinja_dict_set(locals, string_copy(e->iterator), item.item, item.type);
+					_cinja_dict_set(locals, temp_string_copy(e->iterator), item.item, item.type);
 				}
 				break;
 			}
@@ -487,4 +487,9 @@ static string _cinja_render(cinja_template temp, cinja_dict dict, int is_temp)
 string cinja_render(cinja_template temp, cinja_dict dict)
 {
 	return _cinja_render(temp, dict, 0);
+}
+
+string cinja_temp_render(cinja_template temp, cinja_dict dict)
+{
+	return _cinja_render(temp, dict, 1);
 }

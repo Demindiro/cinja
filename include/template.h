@@ -84,5 +84,10 @@ void cinja_free(cinja_template temp);
  */
 string cinja_render(cinja_template temp, cinja_dict dict);
 
+/*
+ * Returns a null-terminated temporary string generated from a template.
+ */
+string cinja_temp_render(cinja_template temp, cinja_dict dict);
+
 
 #endif

@@ -22,7 +22,7 @@ static int _grow_dict(cinja_dict d)
 		return -1;
 	d->entries = tmp;
 	d->size = s;
-	return 0;	
+	return 0;
 }
 
 
