@@ -7,6 +7,7 @@
 
 #include "../include/dict.h"
 #include "../include/list.h"
+#include "../include/temp/dict.h"
 
 
 #define CINJA_TYPE         0xF
@@ -373,8 +374,8 @@ static string _cinja_render(cinja_template temp, cinja_dict dict, int is_temp)
 	int   for_loop_start[16] = { 0 };
 	int   for_loop_end  [16] = { 0 };
 	int   for_loop_index[16] = { 0 };
-	size_t scope_i           =  -1  ;
-	cinja_dict locals        = cinja_dict_create();
+	size_t scope_i   =  -1;
+	cinja_dict locals = cinja_temp_dict_create();
 	for (size_t i = 0; i < temp->count; i++) {
 		strs[count++] = temp->text[2*i];
 		switch (temp->flags[i] & CINJA_TYPE) {
@@ -473,7 +474,6 @@ static string _cinja_render(cinja_template temp, cinja_dict dict, int is_temp)
 		}
 	}
 	strs[count++] = temp->text[2*temp->count];
-	cinja_dict_free(locals);
 	string render;
 	if (!is_temp) {
 		render = string_concat(strs, count);
