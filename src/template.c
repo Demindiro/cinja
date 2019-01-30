@@ -464,7 +464,7 @@ static string _cinja_render(cinja_template temp, cinja_dict dict, int is_temp)
 					i = for_loop_end[scope_i];
 				} else {
 					cinja_list_entry_t item = cinja_list_get(l, for_loop_index[scope_i]);
-					_cinja_dict_set(locals, temp_string_copy(e->iterator), item.item, item.type);
+					_cinja_temp_dict_set(locals, temp_string_copy(e->iterator), item.item, item.type);
 				}
 				break;
 			}
