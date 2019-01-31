@@ -461,7 +461,7 @@ static string _cinja_render(cinja_template temp, cinja_dict dict, int is_temp)
 				cinja_list l = f.value;
 				if (for_loop_index[scope_i] >= l->count) {
 					for_loop[scope_i] = 0;
-					i = for_loop_end[scope_i];
+					i = for_loop_end[scope_i] + 1;
 				} else {
 					cinja_list_entry_t item = cinja_list_get(l, for_loop_index[scope_i]);
 					_cinja_temp_dict_set(locals, temp_string_copy(e->iterator), item.item, item.type);
